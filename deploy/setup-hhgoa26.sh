@@ -62,6 +62,21 @@ chmod 755 "$HOME_DIR" "${HOME_DIR}/www"
 [ -f "${WEB_ROOT}/index.html" ] || die "index.html missing — clone did not work"
 
 # ------------------------------------------------------- 3. nginx server block
+#
+# Once certbot has run it owns the listen/ssl_* lines in this file. Rewriting
+# the file from the template below would silently delete them and drop the site
+# back to plain HTTP, so refuse to touch it and leave the live config alone.
+if [ -f "$SITE_FILE" ] && grep -q "managed by Certbot" "$SITE_FILE"; then
+  say "TLS is already configured in ${SITE_FILE} — NOT overwriting it"
+  echo "    The code has been updated; nginx config left as-is."
+  echo "    To rebuild the vhost from scratch:"
+  echo "      sudo mv ${SITE_FILE} ${SITE_FILE}.bak && sudo bash \$0 && sudo certbot --nginx -d ${DOMAIN}"
+  nginx -t >/dev/null 2>&1 && systemctl reload nginx
+  echo
+  echo "Done — site files updated at ${WEB_ROOT}."
+  exit 0
+fi
+
 say "Writing ${SITE_FILE}"
 cat > "$SITE_FILE" <<CONF
 server {
@@ -108,6 +123,9 @@ server {
         add_header Content-Security-Policy \$hh_csp always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        # repeated here too: certbot adds HSTS at server level, and any location
+        # that sets its own add_header discards every inherited one
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
         add_header Cache-Control "public, max-age=604800";
     }
 
@@ -118,6 +136,9 @@ server {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
+        # repeated here too: certbot adds HSTS at server level, and any location
+        # that sets its own add_header discards every inherited one
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
         add_header Cache-Control "no-cache";
     }
 
