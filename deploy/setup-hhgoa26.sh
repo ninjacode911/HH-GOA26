@@ -88,6 +88,18 @@ server {
     gzip_types text/css application/javascript image/svg+xml application/xml text/plain application/ld+json;
     gzip_min_length 512;
 
+    # Never serve VCS metadata, dotfiles or repo tooling. A git clone leaves a
+    # complete .git directory in the web root, and /.git/config being fetchable
+    # hands an attacker the whole repository. The negative lookahead keeps
+    # /.well-known/ reachable, which certbot's HTTP-01 challenge requires.
+    location ~ /\.(?!well-known/) {
+        access_log off;
+        log_not_found off;
+        return 404;
+    }
+    location ^~ /deploy/ { return 404; }
+    location ~* \.(sh|bak|orig|log)$ { return 404; }
+
     location / {
         try_files \$uri \$uri/ =404;
     }
@@ -128,9 +140,23 @@ systemctl reload nginx
 
 # ------------------------------------------------------------- 5. verify
 say "Verifying over HTTP using a Host header (works before DNS is live)"
-CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" http://127.0.0.1/ || echo 000)
+# `systemctl reload` returns as soon as the signal is sent; the new workers take
+# a moment to take over, so a single immediate curl can still hit the old config.
+CODE=000
+for attempt in 1 2 3 4 5; do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" http://127.0.0.1/ || echo 000)
+  [ "$CODE" = "200" ] && break
+  sleep 1
+done
 echo "    GET / -> HTTP ${CODE}"
 [ "$CODE" = "200" ] || die "expected 200 from the new site, got ${CODE}"
+
+say "Confirming private paths are not served"
+for p in /.git/config /deploy/setup-hhgoa26.sh /.env; do
+  c=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" "http://127.0.0.1${p}" || echo 000)
+  printf '    %-28s -> HTTP %s\n' "$p" "$c"
+  [ "$c" = "404" ] || die "${p} is reachable (HTTP ${c}) — it must not be"
+done
 
 for p in /assets/app.js /assets/styles.css /og.png /robots.txt /favicon.svg; do
   c=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMAIN}" "http://127.0.0.1${p}" || echo 000)
