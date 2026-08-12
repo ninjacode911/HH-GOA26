@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Hacker House Goa 2026">
+  <rect width="64" height="64" rx="14" fill="#0B6839"/>
+  <path d="M32 54 Q36 40 32 28" stroke="#FEE101" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <g transform="translate(32 28)" fill="#FEE101">
+    <g transform="rotate(-160)"><path d="M0 0 Q12 -6 24 -1 Q12 5 0 0Z"/></g>
+    <g transform="rotate(-125)"><path d="M0 0 Q12 -6 24 -1 Q12 5 0 0Z"/></g>
+    <g transform="rotate(-90)"><path d="M0 0 Q12 -6 24 -1 Q12 5 0 0Z"/></g>
+    <g transform="rotate(-52)"><path d="M0 0 Q12 -6 24 -1 Q12 5 0 0Z"/></g>
+    <g transform="rotate(-16)"><path d="M0 0 Q12 -6 24 -1 Q12 5 0 0Z"/></g>
+  </g>
+  <circle cx="32" cy="28" r="3.2" fill="#EC0F7C"/>
+</svg>

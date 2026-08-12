@@ -1,0 +1,52 @@
+# HH Goa 2026 · Frame & Builder ID Generator
+
+> A free browser tool that turns one photo into a branded Hacker House Goa 2026
+> graphic — a PFP frame, a Builder ID card, or a Squad card for up to three
+> teammates. Built for Open Trials Task 01 of Hacker House Goa 2026.
+
+Live site: https://hhgoa.trencoders.com/
+
+## What it does
+
+Upload a photo (JPG, PNG, WebP or HEIC from an iPhone) and the tool draws a
+finished graphic on an HTML5 canvas, then downloads it as a real PNG. Three
+formats are available:
+
+- **Builder ID card** — 1080 × 1350. Framed as a Goan port landing card: photo,
+  name, stack/role, a rolled "callsign", the plan-build-deploy loop, what you are now
+  building, a pass number with a deterministic barcode, and a scannable QR code
+  back to the generator. Set against a drawn Arabian Sea sunset with an azulejo
+  tile band.
+- **PFP frame** — 1080 × 1080. A frame that wraps the photo for use as an X
+  profile picture, designed so nothing important is lost to the circular crop.
+- **Squad card** — 1600 × 900. One to three builders combined into one graphic.
+
+## How it works
+
+- Everything runs client-side. No account, no login, no signup, no upload.
+- The photo never leaves the browser; there is no backend and no API key.
+- Photos are cover-fitted automatically and EXIF orientation is respected, so
+  portrait, landscape and off-centre photos work without pre-cropping. The photo
+  can be dragged to reposition and zoomed with a slider.
+- Output is produced with `canvas.toBlob` as a PNG.
+- Share opens X with a caption pre-written, including the hashtag #FrameInGoa.
+
+## Technology
+
+Static HTML, CSS and vanilla JavaScript with Canvas 2D. No framework, no build
+step, no server. One vendored MIT dependency (qrcode-generator) for QR encoding,
+and heic2any lazy-loaded from a CDN only when a HEIC file is actually selected.
+Typography is Imbue, Victor Mono and Shrikhand, matching the official Hacker
+House Goa 2026 identity.
+
+## About the event
+
+Hacker House Goa 2026 is a four-day builder residency in Goa, India, running
+28–31 October 2026 for 247 in-person builders. Seats are earned by completing
+skill-based Open Trials. Event site: https://hhgoa.com
+
+## Author
+
+Built by Navnit Amrutharaj (Trencoders) — https://trencoders.com
+Source: https://github.com/ninjacode911/HH-GOA26
+License: Source Available, all rights reserved.

@@ -1,0 +1,32 @@
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*-service-account*.json
+
+# --- internal / local tooling ---
+MASTER_RULES.md
+.claude/
+.claude/settings.local.json
+.vscode/
+.idea/
+
+# --- dependencies & build output ---
+node_modules/
+dist/
+build/
+*.map
+
+# --- data & models ---
+data/
+models/
+__pycache__/
+.venv/
+
+# --- OS cruft ---
+Thumbs.db
+Desktop.ini
+.DS_Store

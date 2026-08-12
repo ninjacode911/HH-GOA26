@@ -1,0 +1,21 @@
+# HH Goa 2026 · Frame & Builder ID Generator
+# Everything here is public and meant to be found and shared.
+
+User-agent: *
+Allow: /
+
+# AI crawlers are allowed deliberately — this is a promotional tool for
+# a public event, so being summarised and cited is the point.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://hhgoa.trencoders.com/sitemap.xml
