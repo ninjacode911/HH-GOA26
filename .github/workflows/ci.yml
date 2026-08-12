@@ -1,0 +1,169 @@
+name: ci
+
+# This project has no build step and no dependencies, so CI checks the things
+# that can actually regress here: leaked secrets, unsafe DOM sinks, broken
+# JavaScript, the launch-gate metadata, and page weight.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: no secrets committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { fetch-depth: 0 }
+
+      - name: gitleaks over full history
+        env: { GITLEAKS_VERSION: 8.30.1 }
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --source . --redact --verbose --exit-code 1
+
+      - name: env files and private rules must never be tracked
+        run: |
+          set -euo pipefail
+          for f in .env .env.local MASTER_RULES.md; do
+            if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+              echo "::error::$f is tracked and must not be"; exit 1
+            fi
+          done
+          echo "OK: no private files tracked"
+
+      - name: no secret pattern in any tracked file
+        run: |
+          set -euo pipefail
+          PAT='AIza[A-Za-z0-9_-]{30,}|AQ\.[A-Za-z0-9_-]{20,}|ya29\.[A-Za-z0-9_-]{20,}'
+          PAT="$PAT"'|sk-proj-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{40,}'
+          PAT="$PAT"'|hf_[A-Za-z0-9]{30,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY'
+          # prove the detector works before trusting a clean result
+          printf 'AIza%s\n' 'Sy0000000000000000000000000000000000' > /tmp/canary
+          grep -qE "$PAT" /tmp/canary || { echo "::error::detector is blind"; exit 1; }
+          if git grep -IEn "$PAT" -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::secret pattern found in a tracked file"; exit 1
+          fi
+          echo "OK: detector verified, no secrets found"
+
+  code:
+    name: javascript and DOM safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: every script parses
+        run: |
+          set -euo pipefail
+          for f in assets/app.js assets/shader-bg.js assets/vendor/qrcode.min.js; do
+            node --check "$f" && echo "  ok  $f"
+          done
+
+      - name: no unsafe DOM sinks on user input
+        run: |
+          set -euo pipefail
+          # comments may mention these; code must not use them
+          if grep -nE '(innerHTML|outerHTML|insertAdjacentHTML|document\.write)\s*=?' \
+               assets/app.js assets/shader-bg.js index.html 404.html \
+             | grep -v '^\s*[0-9]*:\s*[/*]' | grep -vE '/\*|\*/|//'; then
+            echo "::error::an unsafe DOM sink is in use"; exit 1
+          fi
+          echo "OK: no unsafe DOM sinks"
+
+      - name: external links carry noopener
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");let bad=0;
+            for (const f of ["index.html","404.html"]) {
+              for (const t of (fs.readFileSync(f,"utf8").match(/<a\b[^>]*>/g)||[])) {
+                if (/target=["\x27]_blank/.test(t) && !/noopener/.test(t)) {
+                  console.error("missing noopener in "+f+": "+t); bad++;
+                }
+              }
+            }
+            if (bad) process.exit(1);
+            console.log("OK: every _blank link has noopener");
+          '
+
+      - name: no inline style or event attributes (CSP needs no unsafe-inline)
+        run: |
+          set -euo pipefail
+          if grep -nE '(style|onclick|onload|onerror|onmouseover)="' index.html 404.html; then
+            echo "::error::inline attribute found; the CSP forbids unsafe-inline"; exit 1
+          fi
+          echo "OK: no inline style or handler attributes"
+
+  launch:
+    name: launch-gate metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: required files exist
+        run: |
+          set -euo pipefail
+          for f in index.html 404.html robots.txt sitemap.xml llms.txt favicon.svg og.png apple-touch-icon.png LICENSE README.md; do
+            [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }
+          done
+          echo "OK: all launch-gate files present"
+
+      - name: head metadata is complete and singular
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs"); const h=fs.readFileSync("index.html","utf8");
+            const fail=[];
+            const h1=(h.match(/<h1/g)||[]).length;
+            if (h1!==1) fail.push("expected exactly one h1, found "+h1);
+            for (const [label,re] of [
+              ["lang attribute",/<html lang="[a-z-]+"/],
+              ["meta description",/name="description"/],
+              ["canonical",/rel="canonical"/],
+              ["og:image",/property="og:image"/],
+              ["og:title",/property="og:title"/],
+              ["twitter:card",/name="twitter:card"/],
+              ["JSON-LD",/application\/ld\+json/],
+              ["favicon",/rel="icon"/],
+            ]) if (!re.test(h)) fail.push("missing "+label);
+            if (fail.length) { console.error(fail.join("\n")); process.exit(1); }
+            console.log("OK: head metadata complete, exactly one h1");
+          '
+
+      - name: og.png is a real 1200x630 image
+        run: |
+          set -euo pipefail
+          node -e '
+            const b=require("fs").readFileSync("og.png");
+            const sig=[137,80,78,71].join(",");
+            if ([b[0],b[1],b[2],b[3]].join(",")!==sig) { console.error("og.png is not a PNG"); process.exit(1); }
+            const w=b.readUInt32BE(16), hh=b.readUInt32BE(20);
+            if (w!==1200 || hh!==630) { console.error("og.png is "+w+"x"+hh+", expected 1200x630"); process.exit(1); }
+            console.log("OK: og.png is a valid PNG at "+w+"x"+hh);
+          '
+
+      - name: sitemap is well formed
+        run: |
+          set -euo pipefail
+          grep -q 'sitemaps.org/schemas/sitemap/0.9' sitemap.xml || { echo "::error::bad sitemap namespace"; exit 1; }
+          grep -q '<loc>' sitemap.xml || { echo "::error::sitemap has no <loc>"; exit 1; }
+          echo "OK: sitemap well formed"
+
+      - name: page weight stays under budget
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const files=["index.html","assets/styles.css","assets/app.js","assets/shader-bg.js","assets/vendor/qrcode.min.js","favicon.svg"];
+            let t=0; for (const f of files) { const s=fs.statSync(f).size; t+=s; console.log("  "+f+" "+(s/1024).toFixed(1)+" KB"); }
+            const kb=t/1024; console.log("  TOTAL "+kb.toFixed(1)+" KB");
+            if (kb>1500) { console.error("over the 1500 KB budget"); process.exit(1); }
+            console.log("OK: within budget");
+          '
